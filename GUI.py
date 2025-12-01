@@ -86,15 +86,22 @@ def findLaneWithSmallCarRearrangement(
     return -1
 
 
-def buildSolutionSummary(S, overflow) -> str:
+def buildSolutionSummary(S, overflow, max_lanes: int = 10) -> str:
+    """
+    Build a textual summary of the solution.
+    Only the first `max_lanes` lanes are included in the summary.
+    """
     lines = []
-    for i in range(len(S)):
+    lanes_to_show = min(max_lanes, len(S))
+    for i in range(lanes_to_show):
         lane = S[i]
         lane_lengths = laneLoad(lane)
         lane_details = [
             f"{vehicle['length']}cm ({vehicle['type']})" for vehicle in lane
         ]
         lines.append(f"Ln {i}\t{lane_lengths}cm\t{lane_details}")
+    if len(S) > lanes_to_show:
+        lines.append(f"... ({len(S) - lanes_to_show} more lanes not shown)")
     overflow_details = [
         f"{vehicle['length']}cm ({vehicle['type']})" for vehicle in overflow
     ]
@@ -107,13 +114,13 @@ def buildSolutionSummary(S, overflow) -> str:
     return "\n".join(lines)
 
 
-def printSol(S, overflow):
-    summary = buildSolutionSummary(S, overflow)
+def printSol(S, overflow, max_lanes: int = 10):
+    summary = buildSolutionSummary(S, overflow, max_lanes=max_lanes)
     print(summary)
     return summary
 
 
-def showSolutionWindow(summary: str):
+def showSolutionWindow(S, overflow, c: int, max_lanes: int = 10):
     try:
         import tkinter as tk
         from tkinter.scrolledtext import ScrolledText
@@ -121,14 +128,81 @@ def showSolutionWindow(summary: str):
         print("tkinter is not available; skipping GUI display.")
         return
 
+    # Colour mapping for vehicle types
+    VEHICLE_COLOURS = {
+        "Small car": "red",
+        "Medium car": "orange",
+        "Large car": "green",
+        "Van": "blue",
+        "Lorry": "purple",
+    }
+
     window = tk.Tk()
     window.title("Ferry Loading Results")
-    window.geometry("600x400")
 
-    text_area = ScrolledText(window, wrap=tk.WORD, state="normal")
+    # Top: visual canvas, Bottom: textual summary
+    lanes_to_show = min(max_lanes, len(S))
+    canvas_height_per_lane = 30
+    top_margin = 20
+    bottom_margin = 20
+    canvas_height = top_margin + bottom_margin + lanes_to_show * canvas_height_per_lane
+    canvas_width = 800
+
+    window.geometry(f"{canvas_width}x600")
+
+    canvas = tk.Canvas(window, width=canvas_width, height=canvas_height, bg="white")
+    canvas.pack(fill=tk.X, side=tk.TOP)
+
+    summary = buildSolutionSummary(S, overflow, max_lanes=max_lanes)
+    text_area = ScrolledText(window, wrap=tk.WORD, state="normal", height=10)
     text_area.insert(tk.END, summary)
     text_area.config(state="disabled")
     text_area.pack(fill=tk.BOTH, expand=True)
+
+    # Draw the first `max_lanes` lanes visually
+    left_margin = 80
+    right_margin = 20
+    usable_width = max(1, canvas_width - left_margin - right_margin)
+    scale = usable_width / max(c, 1)
+
+    for lane_index in range(lanes_to_show):
+        lane = S[lane_index]
+        y_top = top_margin + lane_index * canvas_height_per_lane
+        y_bottom = y_top + canvas_height_per_lane - 10
+
+        # Lane label
+        canvas.create_text(
+            10,
+            (y_top + y_bottom) / 2,
+            anchor="w",
+            text=f"Ln {lane_index}",
+            fill="black",
+        )
+
+        x = left_margin
+        for vehicle in lane:
+            length = vehicle["length"]
+            vtype = vehicle["type"]
+            colour = VEHICLE_COLOURS.get(vtype, "grey")
+            w = length * scale
+            canvas.create_rectangle(x, y_top, x + w, y_bottom, fill=colour, outline="black")
+            # Optional: small text label inside the vehicle rectangle if there is space
+            if w > 40:
+                canvas.create_text(
+                    x + w / 2,
+                    (y_top + y_bottom) / 2,
+                    text=vtype.split()[0],  # short label (e.g. "Small", "Van")
+                    fill="white",
+                )
+            x += w
+
+    if len(S) > lanes_to_show:
+        canvas.create_text(
+            canvas_width / 2,
+            canvas_height - bottom_margin / 2,
+            text=f"... ({len(S) - lanes_to_show} more lanes not shown)",
+            fill="grey",
+        )
 
     # Run the window in a separate blocking loop
     window.mainloop()
@@ -223,8 +297,8 @@ def main(strategy="first"):
             overflow.append(vehicle)
 
     # Print details of the solution to the screen and pop out a window view
-    summary = printSol(S, overflow)
-    showSolutionWindow(summary)
+    summary = printSol(S, overflow, max_lanes=10)
+    showSolutionWindow(S, overflow, c, max_lanes=10)
 
 
 if __name__ == "__main__":
